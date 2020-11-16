@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<style>
+	* {
+		font-family: sans-serif;
+	}
+
+	rect.cell {
+		stroke-width: 0.5;
+		stroke: rgb(0, 0, 0);
+	}
+
+	rect.cell.alive {
+		fill: black;
+	}
+
+	rect.cell.dead {
+		fill: white
+	}
+
+	line {
+		stroke: black;
+		stroke-width: 0.5;
+	}
+
+	.block {
+		display: inline-block;
+		vertical-align: top;
+	}
+
+	.block.info {
+		margin-left: 30px;
+		max-width: 600px;
+	}
+</style>
+
+<body>
+	<h1>The Game of Life in d3.js</h1>
+	<div>
+		<button onclick="startButton()" id="startBtn">Start</button>
+		<button onclick="pauseButton()" id="pauseBtn">Pause</button>
+		<button onclick="resetButton()" id="resetBtn">Reset</button>
+	</div>
+	<div id="status">Status: Not running</div>
+	<div id="genCount">Generation: 0</div>
+	<div id="cellsCount">Live cells: 0</div>
+	<div class="block" id="mainContainer"></div>
+	<div class="block info" id="infoContainer">
+		<h3>What is this?</h3>
+		<p>The Game of Life is a cellular automaton created by mathematician John Conway, in which after an initial input,
+			a system of cells evolves following 4 well-defined rules. <small>More info: <a
+					href="https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life" target="_blank">Wikipedia page</a> </small>
+		</p>
+		<h3>What are the four rules?</h3>
+		<ol>
+			<li>Any live cell with fewer than two live neighbours dies, as if by underpopulation.</li>
+			<li>Any live cell with two or three live neighbours lives on to the next generation.</li>
+			<li>Any live cell with more than three live neighbours dies, as if by overpopulation.</li>
+			<li>Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.</li>
+		</ol>
+		<h3>How to use this?</h3>
+		<ul>
+			<li> <strong>Click</strong> or <strong>drag</strong> any number of cells, this will toggle them between alive
+				or dead (black or white).
+			</li>
+			<li>Click the <strong>start</strong> button and the algorithm will run according to the four rules.
+			</li>
+			<li>You can click the pause button and the cells will freeze in the current state (you can click/drag at this
+				point
+				also).</li>
+			<li>The reset button will clear the graph.</li>
+		</ul>
+		<h3>Where can I find the source code?</h3>
+		<p><a href="https://github.com/jfcordovam/d3js-game-of-life" target="_blank">GitHub link</a></p>
+	</div>
+	<script>
+		let margin = { top: 50, right: 50, bottom: 50, left: 50 },
+			width = 600,
+			height = 600,
+			data = [],
+			numberOfLines = 60,
+			lengthMultiplier = 10,
+			liveCellsCount = 0,
+			generationCount = 0,
+			isPlaying = false,
+			generationCountDiv = d3.select("#genCount"),
+			cellsCountDiv = d3.select("#cellsCount"),
+			mainInterval;
+
+		// Initialize data (all cells are dead)
+		for (let i = 0; i < numberOfLines; i++) {
+			for (let j = 0; j < numberOfLines; j++) {
+				data.push({ x: i * lengthMultiplier, y: j * lengthMultiplier, status: "dead" })
+			}
+		}
+
+		// Add main SVG
+		let svg = d3.select("#mainContainer").append("svg")
+			.attr("width", width)
+			.attr("height", height)
+			.on("click", function () {
+				addInitialSeed(d3.mouse(this))
+				countAliveCells()
+			})
+			.call(d3.drag()
+				.on("drag", dragged)
+			)
+
+		function dragged() {
+			addInitialSeed(d3.mouse(this))
+			countAliveCells()
+		}
+
+		// Draw grid
+		for (let i = 0; i < numberOfLines; i++) {
+			svg.append("line")
+				.attr("x1", i * lengthMultiplier)
+				.attr("x2", i * lengthMultiplier)
+				.attr("y1", 0)
+				.attr("y2", height)
+		}
+
+		for (let j = 0; j < numberOfLines; j++) {
+			svg.append("line")
+				.attr("x1", 0)
+				.attr("x2", width)
+				.attr("y1", j * lengthMultiplier)
+				.attr("y2", j * lengthMultiplier)
+		}
+
+		function addInitialSeed(coordinates) {
+			let thisX = coordinates[0] - coordinates[0] % 10,
+				thisY = coordinates[1] - coordinates[1] % 10,
+				thisCell = data.find(function (d) {
+					return d.x === thisX && d.y === thisY
+				})
+
+			if (thisCell.status === "dead") {
+				thisCell.status = "alive"
+			} else if (thisCell.status === "alive") {
+				thisCell.status = "dead"
+			}
+			let rectSelection = svg.selectAll("rect.cell.alive").data(data.filter(function (d) { return d.status === "alive" }));
+
+			rectSelection.exit().remove();
+
+			rectSelection = rectSelection
+				.enter()
+				.append("rect")
+				.merge(rectSelection)
+				.attr("class", "cell alive")
+				.attr("width", lengthMultiplier)
+				.attr("height", lengthMultiplier)
+				.attr("x", d => { return d.x })
+				.attr("y", d => { return d.y })
+		}
+
+		// Returns boolean
+		function shouldThisCellLive(cell) {
+			let aliveNeighbors = countAliveNeighbors(cell)
+
+			if (cell.status === "alive") {
+				if (aliveNeighbors < 2) {
+					return false // underpopulation
+				} else if (aliveNeighbors === 2 || aliveNeighbors === 3) {
+					return true
+				} else if (aliveNeighbors > 3) {
+					return false // overpopulation
+				}
+			} else if (cell.status === "dead") {
+				if (aliveNeighbors === 3) {
+					return true // newborn
+				} else return false
+			}
+
+		}
+
+		// Returns integer
+		function countAliveNeighbors(cell) {
+
+			let xPosition = cell.x / lengthMultiplier,
+				yPosition = cell.y / lengthMultiplier,
+				aliveNeighborsCount = 0
+
+			// find neighbors
+			for (let i = -1; i < 2; i++) {
+				for (let j = -1; j < 2; j++) {
+					if (!(i === 0 && j === 0)) {
+						let inspectedCell = getCellByCoordinates({ x: (xPosition + i) * lengthMultiplier, y: (yPosition + j) * lengthMultiplier })
+						if (inspectedCell) {
+							// is found neighbor alive?
+							if (inspectedCell.status === "alive") {
+								aliveNeighborsCount++
+							}
+						}
+					}
+				}
+			}
+			return aliveNeighborsCount
+		}
+
+		// Returns an array of two elements, position X and Y of given cell
+		function getCoordinatesXY(cell) {
+			return [+cell.attr("x") / lengthMultiplier, +cell.attr("y") / lengthMultiplier]
+		}
+
+		// Returns a cell instance by given X and Y positions
+		function getCellByCoordinates(cords) {
+			return data.find(function (d) { return d.x === cords.x && d.y === cords.y })
+		}
+
+		function passGeneration() {
+			generationCount++;
+			let survivingCells = [],
+				dyingCells = [];
+
+			generationCountDiv.text("Generation: " + generationCount)
+			countAliveCells()
+
+			data.forEach(function (d) {
+				if (shouldThisCellLive(d)) {
+					survivingCells.push(d)
+				} else {
+					dyingCells.push(d)
+				}
+			})
+
+			survivingCells.forEach(function (d) {
+				let thisCellData = data.find(function (e) {
+					return d.x === e.x && d.y === e.y
+				})
+				thisCellData.status = "alive"
+			})
+
+			dyingCells.forEach(function (d) {
+				let thisCellData = data.find(function (e) {
+					return d.x === e.x && d.y === e.y
+				})
+				thisCellData.status = "dead"
+			})
+
+
+			rectSelection = svg.selectAll("rect.cell.alive").data(data.filter(function (d) { return d.status === "alive" }));
+
+			rectSelection.exit().remove();
+
+			rectSelection = rectSelection
+				.enter()
+				.append("rect")
+				.merge(rectSelection)
+				.attr("class", "cell alive")
+				.attr("width", lengthMultiplier)
+				.attr("height", lengthMultiplier)
+				.attr("x", d => { return d.x })
+				.attr("y", d => { return d.y })
+
+		}
+
+		function mainAlgorithm() {
+			mainInterval = setInterval(function () {
+				if (isPlaying) {
+					setStatus("Running")
+					passGeneration()
+				}
+			}, 50)
+		}
+
+		// Button functions
+		function startButton() {
+			if (!isPlaying) {
+				isPlaying = true
+				mainAlgorithm()
+			}
+
+		}
+
+		function pauseButton() {
+			if (isPlaying) {
+				isPlaying = false
+				clearInterval(mainInterval)
+				setStatus("Paused")
+			}
+		}
+
+		function resetButton() {
+			isPlaying = false
+			clearInterval(mainInterval)
+			setStatus("Not running")
+			data.forEach(d => {
+				d.status = "dead"
+			})
+			passGeneration()
+			countAliveCells()
+			generationCount = 0
+			generationCountDiv.text("Generation: 0")
+		}
+
+
+		// UTILITARY FUNCTIONS
+
+		// Calculates and sets global count of live cells
+		function countAliveCells() {
+			let count = 0
+			data.forEach(function (d) {
+				if (d.status === "alive") {
+					count++
+				}
+			})
+			cellsCountDiv.text("Live cells: " + count)
+			return
+		}
+
+		function whoIsAlive() {
+			data.forEach(function (d) {
+				if (d.status === "alive") {
+					console.log(d)
+				}
+			})
+		}
+
+		function setStatus(status) {
+			d3.select("#status").text("Status: " + status)
+		}
+	</script>
+</body>
