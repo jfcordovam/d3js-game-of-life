@@ -10,4 +10,4 @@ Instructions for local use:
 
 - python -m http.server
 
-Otherwise vist this bl.ocks link: https://bl.ocks.org/jfcordovam/raw/2ae78c87ab798c7597a9807548980f2e/
+Otherwise visit this bl.ocks link: https://bl.ocks.org/jfcordovam/raw/2ae78c87ab798c7597a9807548980f2e/
