@@ -8,6 +8,8 @@ Instructions for local use:
 
 - cd d3js-game-of-life
 
+Run a local server, there are many alternatives. Eg you can use Python:
+
 - python -m http.server
 
-Otherwise visit this bl.ocks link: https://bl.ocks.org/jfcordovam/raw/2ae78c87ab798c7597a9807548980f2e/
+Otherwise visit https://jfcordovam.github.io/d3js/
